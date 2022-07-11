@@ -1,0 +1,12 @@
+{
+    "python.linting.pylintEnabled": true,
+    "python.linting.enabled": true,
+    "cSpell.customDictionaries": {
+        "custom-dictionary-workspace": {
+            "name": "custom-dictionary-workspace",
+            "path": "${workspaceFolder:PortfolioTracker}/.cspell/custom-dictionary-workspace.txt",
+            "addWords": true,
+            "scope": "workspace"
+        }
+    }
+}
