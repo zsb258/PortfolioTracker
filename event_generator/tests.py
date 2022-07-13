@@ -128,6 +128,7 @@ class EventGeneratorTestCase(TestCase):
         self.assertDictEqual(curr, sample_trade_event_last)
 
 class SchedulerTestCase(LiveServerTestCase):
+    """Requires changing TEST_URL to point to localhost:8001"""
     def setUp(self) -> None:
         self.event_generator = EventGenerator()
         self.event_generator._reset_for_unittest()
@@ -138,6 +139,7 @@ class SchedulerTestCase(LiveServerTestCase):
         Bond.objects.all().delete()
         Desk.objects.all().delete()
 
+        # Populate test DB
         data = _read_csv(csv_filename='example/example_initial_fx.csv')
         for row in data:
             FX.objects.get_or_create(currency=row[0], rate=row[1])
@@ -152,9 +154,14 @@ class SchedulerTestCase(LiveServerTestCase):
         for row in data:
             Desk.objects.get_or_create(desk_id=row[0], cash=row[1])
 
+        # Initiate scheduler
+        _scheduler.start() if not _scheduler.running else None
+
+
     def test_scheduler_is_running(self):
         self.assertEqual(_scheduler.running, True)
 
+    # FIXME: This test is not working.
     def test_scheduler_remove_jobs(self):
         while self.event_generator._market_data_producer.has_next() \
             or self.event_generator._trade_event_producer.has_next():

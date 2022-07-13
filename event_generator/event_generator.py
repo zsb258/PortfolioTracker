@@ -50,7 +50,7 @@ class EventGenerator(metaclass=Singleton):
         self._enqueue_events(events)
 
     def _reset_for_unittest(self) -> None:
-        """Helper function to reset for testing purposes."""
+        """Help to set the event_generator for testing purposes."""
         self._market_data_producer = None
         self._trade_event_producer = None
         json_filename = 'example/example_events.json'

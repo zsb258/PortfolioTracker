@@ -1,47 +1,51 @@
 """Module that implements a scheduler to publish events to server endpoint using POST request ."""
 
-from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.schedulers.background import BlockingScheduler
 from apscheduler.events import JobEvent, EVENT_JOB_ERROR
-from django.test import Client
+import requests
 
 from event_generator.event_generator import EventGenerator
 
-_scheduler = BackgroundScheduler({
+SERVER_URL = 'http://localhost:8000'
+
+_scheduler = BlockingScheduler({
     'daemon': True,
     'apscheduler.job_defaults.max_instances': 2
 })
 
-_client = Client()
 
 def publish_market_data():
     """Uses dummy client to publish market data."""
-    print('Publishing new market data...')
     payload = EventGenerator().send_next_market_data()
     if payload:
-        _client.post('/api/events/', data=payload)
+        print(f'Publishing new market data (event {payload["EventID"]})...')
+        requests.post(f'{SERVER_URL}/api/events/', data=payload)
     else:
         raise Exception('No market data to publish')
 
 def publish_trade_event():
     """Uses dummy client to publish trade event."""
-    print('Publishing new trade event...')
     payload = EventGenerator().send_next_trade_event()
     if payload:
-        _client.post('/api/events/', data=payload)
+        print(f'Publishing new trade event (event {payload["EventID"]})...')
+        requests.post(f'{SERVER_URL}/api/events/', data=payload)
     else:
         raise Exception('No trade event to publish')
 
-# Schedule job functions to be called every 3 seconds
-# with an extra-delay picked randomly in a [-2,+2] seconds window.
-# Mimics delay of 1 to 5 seconds between publishing events.
+# Schedule to post a new market data every 2 seconds
+# with an extra-delay picked randomly in a [-1, +1] seconds window.
 _scheduler.add_job(
     publish_market_data,
-    'interval', seconds=3, jitter=2,
+    'interval', seconds=2, jitter=1,
     id='market_data_producer',
 )
+
+# Schedule to post a new trade event every 5 seconds
+# Trade events are sent less frequently than market data events,
+# due to the observation that there are more market data events than trade events.
 _scheduler.add_job(
     publish_trade_event,
-    'interval', seconds=3, jitter=2,
+    'interval', seconds=5,
     id='trade_event_producer',
 )
 
