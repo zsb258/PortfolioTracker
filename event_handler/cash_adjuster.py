@@ -2,6 +2,8 @@
 
 from decimal import Decimal
 
+from django.db import IntegrityError
+
 from api.models import (
     FX, Bond, Desk, Trader, Book, BondRecord, EventLog, EventExceptionLog
 )
@@ -34,17 +36,21 @@ class CashAdjuster(metaclass=Singleton):
         exclusion_type: str,
     ) -> None:
         """Log excluded event by creating an entry in DB table `EventExceptionLog`."""
-        EventExceptionLog.objects.create(
-            event_id=int(event['EventID']),
-            desk_id=desk,
-            trader_id=trader,
-            book_id=book,
-            buy_sell=event['BuySell'],
-            quantity=int(event['Quantity']),
-            bond_id=bond,
-            price=bond.price,  # None if bond does not have a price
-            exclusion_type=exclusion_type,
-        )
+        try :
+            EventExceptionLog.objects.create(
+                event_id=int(event['EventID']),
+                desk_id=desk,
+                trader_id=trader,
+                book_id=book,
+                buy_sell=event['BuySell'],
+                quantity=int(event['Quantity']),
+                bond_id=bond,
+                price=bond.price,  # None if bond does not have a price
+                exclusion_type=exclusion_type,
+            )
+        except IntegrityError:
+            # TODO: Implement handling of duplicate entries
+            pass
 
     def _adjust_position(self, event: TradeEvent, bond_record: BondRecord) -> None:
         if event['BuySell'] == 'buy':
@@ -65,20 +71,24 @@ class CashAdjuster(metaclass=Singleton):
         fx: FX,
     ) -> None:
         """Log event by creating an entry in DB table `EventLog`."""
-        EventLog.objects.create(
-            event_id=int(event['EventID']),
-            desk_id=desk,
-            trader_id=trader,
-            book_id=book,
-            buy_sell=event['BuySell'],
-            quantity=int(event['Quantity']),
-            bond_id=bond,
-            position=bond_record.position,
-            price=bond.price,
-            fx_rate=fx.rate,
-            value=trade_value,
-            cash=desk.cash,
-        )
+        try:
+            EventLog.objects.create(
+                event_id=int(event['EventID']),
+                desk_id=desk,
+                trader_id=trader,
+                book_id=book,
+                buy_sell=event['BuySell'],
+                quantity=int(event['Quantity']),
+                bond_id=bond,
+                position=bond_record.position,
+                price=bond.price,
+                fx_rate=fx.rate,
+                value=trade_value,
+                cash=desk.cash,
+            )
+        except IntegrityError:
+            # TODO: Implement handling of duplicate entries
+            pass
 
     def _process_log_event(
         self,

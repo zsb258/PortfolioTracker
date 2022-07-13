@@ -308,3 +308,48 @@ class EventHandlerTestCase(TestCase):
                 'exclusion_type': 'QUANTITY_OVERLIMIT',
             }
         )
+
+    def test_event_handler_handles_unordered_events(self):
+        self.setUp()
+        
+        # Event 1
+        self.event_handler.handle_event(sample_market_data[0])
+        self.assertEqual(self.event_handler.get_latest_event_id(), 1)
+        self.assertEqual(EventHandler()._queue, [])
+
+        # Event 3
+        self.event_handler.handle_event(sample_market_data[1])
+        self.assertEqual(self.event_handler.get_latest_event_id(), 1)
+        self.assertEqual(EventHandler()._queue, [
+            (3, sample_market_data[1]),
+        ])
+
+        # Event 2
+        self.event_handler.handle_event(sample_trade_events[0])
+        self.assertEqual(self.event_handler.get_latest_event_id(), 3)
+        self.assertEqual(EventHandler()._queue, [])
+
+        # Event 6
+        self.event_handler.handle_event(sample_market_data[3])
+        self.assertEqual(self.event_handler.get_latest_event_id(), 3)
+        self.assertEqual(EventHandler()._queue, [
+            (6, sample_market_data[3]),
+        ])
+
+        # Event 5
+        self.event_handler.handle_event(sample_market_data[2])
+        self.assertEqual(EventHandler().get_latest_event_id(), 3)
+        self.assertEqual(EventHandler()._queue, [
+            (5, sample_market_data[2]),
+            (6, sample_market_data[3]),
+        ])
+
+        # Event 4
+        self.event_handler.handle_event(sample_trade_events[1])
+        self.assertEqual(self.event_handler.get_latest_event_id(), 6)
+        self.assertEqual(EventHandler._queue, [])
+        print(EventHandler().get_latest_event_id())
+        print(EventHandler()._latest_event_id)
+
+
+
