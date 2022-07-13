@@ -1,0 +1,3 @@
+from event_generator.event_publisher import start_publishing
+
+start_publishing()
