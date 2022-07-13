@@ -1,10 +1,9 @@
+"""Event generator module."""
+
 from pathlib import Path
 import json
-from typing import Deque, Generator, List, Union, Tuple
+from typing import Deque, List, Union
 from collections import deque
-import asyncio
-import time
-import random
 
 from util.common_types import Event, MarketEvent, TradeEvent
 from util.singleton import Singleton
@@ -15,64 +14,36 @@ class _DataProducer:
     def __init__(self, events: Deque[Event]):
         self._queue = events
 
-    def _add_delay(self) -> None:
-        """Helper function to add delay."""
-        time.sleep(random.randint(1, 5))
-
     # API functions
     def has_next(self) -> bool:
         """Check if there is next event in queue."""
         return len(self._queue) > 0
 
-    def publish(self) -> Union[Event, None]:
+    def send_next(self) -> Union[Event, None]:
         """Publish next event from queue."""
         if self.has_next():
-            # self._add_delay()
             return self._queue.popleft()
         return None
 
-    def _publish_immediate(self, to_print=True) -> Union[Event, None]:
-        """Helper for testing."""
-        if self.has_next():
-            temp = self._queue.popleft()
-            if to_print:
-                print(temp)
-            return temp
-        return None
-
-    def start(self) -> Generator[Event, None, None]:
-        """Start producing events."""
-        while self.has_next():
-            # yield self.publish()
-            yield self._publish_immediate()
-
-    async def _async_delay(self) -> None:
-        """Helper function to add delay."""
-        asyncio.sleep(random.randint(1, 5))
-
-    async def produce(self) -> Generator[Event, None, None]:
-        """Async produce events."""
-        while self.has_next():
-            await self._async_delay()
-            yield self._publish_immediate()
-
-class MarketDataProducer(_DataProducer):
+class _MarketDataProducer(_DataProducer):
     def __init__(self, events: Deque[MarketEvent]):
         super().__init__(events)
 
-class TradeEventProducer(_DataProducer):
+class _TradeEventProducer(_DataProducer):
     def __init__(self, events: Deque[TradeEvent]):
         super().__init__(events)
 
 
-class EventGenerator(object, metaclass=Singleton):
-    """Class to read events from json file."""
+class EventGenerator(metaclass=Singleton):
+    """Class to read events from json file.
+    Has API to send next events.
+    """
 
     DATA_DIR = Path(__file__).absolute().parent.parent / 'data'
 
     # Class variables
-    _market_data_producer: MarketDataProducer = None
-    _trade_event_producer: TradeEventProducer = None
+    _market_data_producer: _MarketDataProducer = None
+    _trade_event_producer: _TradeEventProducer = None
 
     def __init__(self, json_filename: str = 'events.json'):
         events = self._read_json(json_filename)
@@ -109,18 +80,14 @@ class EventGenerator(object, metaclass=Singleton):
                 elif event['EventType'] == 'TradeEvent':
                     _trade_event_queue.append(event)
                 else:
-                    raise ValueError(f'Unknown event type: {event["EventType"]}')
-        self._market_data_producer = MarketDataProducer(_market_data_queue)
-        self._trade_event_producer = TradeEventProducer(_trade_event_queue)
+                    raise ValueError(f'Unknown event: {event["EventType"]}')
+        self._market_data_producer = _MarketDataProducer(_market_data_queue)
+        self._trade_event_producer = _TradeEventProducer(_trade_event_queue)
 
-    def get_data_producers(self) -> Tuple[MarketDataProducer, TradeEventProducer]:
-        """Helper function to get producers."""
-        return self._market_data_producer, self._trade_event_producer
-
-    def publish_next_market_data(self) -> Union[MarketEvent, None]:
+    def send_next_market_data(self) -> Union[MarketEvent, None]:
         """Helper function to get next market data."""
-        return self._market_data_producer.publish()
+        return self._market_data_producer.send_next()
 
-    def publish_next_trade_event(self) -> Union[TradeEvent, None]:
+    def send_next_trade_event(self) -> Union[TradeEvent, None]:
         """Helper function to get next trade event."""
-        return self._trade_event_producer.publish()
+        return self._trade_event_producer.send_next()

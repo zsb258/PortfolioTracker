@@ -1,6 +1,13 @@
-from django.test import TestCase
+import time
 
+from django.test import TestCase, LiveServerTestCase
+
+from api.populate_db import _read_csv
+from api.models import (
+    FX, Bond, Desk, Trader, Book, BondRecord, EventLog, EventExceptionLog
+)
 from event_generator.event_generator import EventGenerator
+from event_generator.event_publisher import _scheduler
 from util.common_types import Event, MarketEvent, TradeEvent, PriceEvent, FXEvent
 
 class EventTypesTestCase(TestCase):
@@ -62,16 +69,16 @@ class EventGeneratorTestCase(TestCase):
         
         self.assertEqual(self.generator_a._market_data_producer.has_next(), True)
         self.assertDictEqual(
-            self.generator_a.publish_next_market_data(), sample_market_event1
+            self.generator_a.send_next_market_data(), sample_market_event1
         )
 
         self.assertEqual(self.generator_b._market_data_producer.has_next(), True)
         self.assertDictEqual(
-            self.generator_b.publish_next_market_data(), sample_market_event2
+            self.generator_b.send_next_market_data(), sample_market_event2
         )
 
         while (self.generator_a._market_data_producer.has_next()):
-            curr = self.generator_a._market_data_producer._publish_immediate(False)
+            curr = self.generator_a._market_data_producer.send_next()
         self.assertDictEqual(curr, sample_market_event_last)
 
     def test_trade_event_producer(self):
@@ -108,14 +115,50 @@ class EventGeneratorTestCase(TestCase):
 
         self.assertEqual(self.generator_a._trade_event_producer.has_next(), True)
         self.assertDictEqual(
-            self.generator_a.publish_next_trade_event(), sample_trade_event1
+            self.generator_a.send_next_trade_event(), sample_trade_event1
         )
 
         self.assertEqual(self.generator_a._trade_event_producer.has_next(), True)
         self.assertDictEqual(
-            self.generator_b.publish_next_trade_event(), sample_trade_event2
+            self.generator_b.send_next_trade_event(), sample_trade_event2
         )
 
         while (self.generator_a._trade_event_producer.has_next()):
-            curr = self.generator_a._trade_event_producer._publish_immediate(False)
+            curr = self.generator_a._trade_event_producer.send_next()
         self.assertDictEqual(curr, sample_trade_event_last)
+
+class SchedulerTestCase(LiveServerTestCase):
+    def setUp(self) -> None:
+        self.event_generator = EventGenerator()
+        self.event_generator._reset_for_unittest()
+
+        # Clear all tables from auto-populate on start up
+        # See `api/apps.py` for more details
+        FX.objects.all().delete()
+        Bond.objects.all().delete()
+        Desk.objects.all().delete()
+
+        data = _read_csv(csv_filename='example/example_initial_fx.csv')
+        for row in data:
+            FX.objects.get_or_create(currency=row[0], rate=row[1])
+
+        data = _read_csv(csv_filename='example/example_bond_details.csv')
+        for row in data:
+            Bond.objects.get_or_create(
+                bond_id=row[0], currency=FX.objects.get(currency=row[1])
+            )
+
+        data = _read_csv(csv_filename='example/example_initial_cash.csv')
+        for row in data:
+            Desk.objects.get_or_create(desk_id=row[0], cash=row[1])
+
+    def test_scheduler_is_running(self):
+        self.assertEqual(_scheduler.running, True)
+
+    def test_scheduler_remove_jobs(self):
+        while self.event_generator._market_data_producer.has_next() \
+            or self.event_generator._trade_event_producer.has_next():
+            time.sleep(5)
+        time.sleep(5)  # wait for scheduler to finish
+        self.assertEqual(_scheduler.get_jobs(), [])
+        self.assertEqual(_scheduler.running, False)

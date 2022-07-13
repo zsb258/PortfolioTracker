@@ -25,7 +25,11 @@ SECRET_KEY = 'django-insecure-abf-^ei=ai$p@m&fi1@pkz8w78vwds$rdkow7yab+)35qc1(ii
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    '127.0.0.1',
+    'localhost',
+    'testserver',
+]
 
 
 # Application definition
@@ -37,7 +41,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'api',
+    'api.apps.ApiConfig',
     'event_generator',
     'event_handler',
     'report_generator',
@@ -83,6 +87,10 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
+        'TEST': {
+            'NAME': BASE_DIR / 'db-test.sqlite3',
+            'MIGRATE': False,
+        }
     }
 }
 

@@ -9,7 +9,7 @@ class FX(models.Model):
     """Schema for table `FX`. Stores most updated exchange rates."""
     currency: str = models.CharField(max_length=3, primary_key=True)
     rate: Decimal = models.DecimalField(max_digits=19, decimal_places=5)
-    updated: int = models.IntegerField(default=0)
+    updated: int = models.PositiveIntegerField(default=0)
 
     def __str__(self):
         return f'{self.currency} {self.rate}'
@@ -21,7 +21,7 @@ class Bond(models.Model):
     price: Decimal = models.DecimalField(
         max_digits=19, decimal_places=5, blank=True, null=True
     )
-    updated: int = models.IntegerField(default=0)
+    updated: int = models.PositiveIntegerField(default=0)
 
     def __str__(self):
         return f'{self.bond_id} {self.currency}'
@@ -30,7 +30,7 @@ class Desk(models.Model):
     """Schema for table `desk`. Stores most updated desk data."""
     desk_id: str = models.CharField(max_length=5, primary_key=True)
     cash: Decimal = models.DecimalField(max_digits=19, decimal_places=5)
-    updated: int = models.IntegerField(default=0)
+    updated: int = models.PositiveIntegerField(default=0)
 
     def __str__(self):
         return f'{self.desk_id} ${self.cash}'
@@ -56,7 +56,7 @@ class BondRecord(models.Model):
     trader_id: str = models.ForeignKey(Trader, on_delete=models.CASCADE)
     book_id: str = models.ForeignKey(Book, on_delete=models.CASCADE)
     bond_id: str = models.ForeignKey(Bond, on_delete=models.CASCADE)
-    position: int = models.IntegerField(default=0)
+    position: int = models.PositiveIntegerField(default=0)
 
     def __str__(self):
         return f'{self.trader_id} {self.bond_id} {self.position}'
@@ -66,14 +66,14 @@ class EventLog(models.Model):
     that records changes after a trade event
     """
 
-    event_id: int = models.IntegerField(primary_key=True)
+    event_id: int = models.PositiveIntegerField(primary_key=True)
     desk_id: str = models.ForeignKey(Desk, on_delete=models.CASCADE)
     trader_id: str = models.ForeignKey(Trader, on_delete=models.CASCADE)
     book_id: str = models.ForeignKey(Book, on_delete=models.CASCADE)
-    buy_sell: str = models.CharField(max_length=1)  # B or S
-    quantity: int = models.IntegerField()
+    buy_sell: str = models.CharField(max_length=1)  # `buy` or `sell`
+    quantity: int = models.PositiveIntegerField()
     bond_id: str = models.ForeignKey(Bond, on_delete=models.CASCADE)
-    position: int = models.IntegerField()
+    position: int = models.PositiveIntegerField()
     price: Decimal = models.DecimalField(max_digits=19, decimal_places=5)
     fx_rate: Decimal = models.DecimalField(max_digits=19, decimal_places=5)
     value: Decimal = models.DecimalField(
@@ -89,24 +89,29 @@ class EventLog(models.Model):
             {self.position} {self.price} {self.fx_rate} {self.value} \
             {self.cash}'
 
-    def get_net_value(self):
-        """Returns net value of the trade event."""
-        if self.quantity and self.price and self.fx_rate:
-            return round(self.quantity * (self.price / self.fx_rate), 2)
-        raise ValueError('NV cannot be calculated')
-
 class EventExceptionLog(models.Model):
     """Schema for table `event_exception_log`
     that records exceptions raised during a trade event
     """
     class TradeExceptionEnum(models.TextChoices):
         """Enum of names of trade exceptions."""
-        INSUFFICIENT_CASH = 'INSUFFICIENT_CASH'
-        BOND_NOT_FOUND = 'BOND_NOT_FOUND'
+        NO_MARKET_PRICE = 'NO_MARKET_PRICE'
+        CASH_OVERLIMIT = 'CASH_OVERLIMIT'
+        QUANTITY_OVERLIMIT = 'QUANTITY_OVERLIMIT'
+
     event_id: int = models.IntegerField(primary_key=True)
-    exception_name: str = models.CharField(
+    desk_id: str = models.ForeignKey(Desk, on_delete=models.CASCADE)
+    trader_id: str = models.ForeignKey(Trader, on_delete=models.CASCADE)
+    book_id: str = models.ForeignKey(Book, on_delete=models.CASCADE)
+    buy_sell: str = models.CharField(max_length=1)  # `buy` or `sell`
+    quantity: int = models.PositiveIntegerField()
+    bond_id: str = models.ForeignKey(Bond, on_delete=models.CASCADE)
+    price: Decimal = models.DecimalField(
+        max_digits=19, decimal_places=5, blank=True, null=True
+    )
+    exclusion_type: str = models.CharField(
         max_length=20, choices=TradeExceptionEnum.choices
     )
 
     def __str__(self):
-        return f'{self.event_id} {self.exception_name}'
+        return f'{self.event_id} {self.exclusion_type}'

@@ -14,16 +14,15 @@ def _read_csv(csv_filename: str) -> Union[List[List[str]], str]:
     return a list containing each row as nested list.
     Headers are ignored.
     """
-
     filepath = DATA_DIR / csv_filename
     try:
         with open(filepath, 'r', encoding='UTF-8') as file:
-            reader = csv.reader(file)
-            return list(reader)[1:]
+            reader = csv.reader(file, skipinitialspace=True)
+            return [[x.strip() for x in row] for row in reader][1:]
     except FileNotFoundError:
         return f'File {filepath} not found.'
 
-def _add_fx(filename = 'initial_fx.csv'):
+def _add_fx(filename: str = 'initial_fx.csv'):
     data: List[List[str]] = _read_csv(filename)
     for row in data:
         FX.objects.get_or_create(currency=row[0], rate=row[1])

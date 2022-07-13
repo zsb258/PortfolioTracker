@@ -208,3 +208,6 @@ venv-dev/
 requirements-dev.txt
 dev.sh
 .temp/
+db-test.sqlite3
+db-test.sqlite3-journal
+
