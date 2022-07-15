@@ -1,5 +1,4 @@
   .LivePortfolio {
     display: flex;
-    flex-direction: row;
-    align-content: space-around;
+    /* align-content: space-around; */
   }

@@ -5,13 +5,15 @@ import './App.css';
 import LivePortfolio from './components/LivePortfolio/LivePortfolio';
 import ReportExporter from './components/ReportExporter/ReportExporter';
 import Header from './components/Header/Header';
+import CashLevelPortfolio from './components/CashLevelPortfolio/CashLevelPortfolio';
 
 function App() {
   return (
     <div className="App">
-      <Header />
-      <LivePortfolio />
       <ReportExporter />
+      <Header />
+      <CashLevelPortfolio />
+      <LivePortfolio />
       {/* <header className="App-header">
         <img src={logo} className="App-logo" alt="logo" />
         <p>

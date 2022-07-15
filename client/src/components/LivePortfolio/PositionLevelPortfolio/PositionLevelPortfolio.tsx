@@ -2,19 +2,19 @@ import React, { FC, useEffect, useState } from 'react';
 import styles from './PositionLevelPortfolio.module.css';
 
 import { serverAPI } from '../../../utils/serverAPI';
+import { PositionLevelResponse } from '../../../utils/types';
 
-interface PositionLevelPortfolioProps {}
-interface TraderModel {
-  model: string;
-  pk: string;
-  fields: {
-    desk_id: number;
-  }
-}
+interface PositionLevelPortfolioProps { }
 
 const PositionLevelPortfolio: FC<PositionLevelPortfolioProps> = () => {
-  let [data, setData] = useState<TraderModel[]>([]);
-  
+  const [data, setData] = useState<PositionLevelResponse[]>([]);
+
+  const fetchData = async () => {
+    const result = await serverAPI.get('api/get_position_portfolio');
+    console.log(result.data);
+    setData(result.data);
+  }
+
   useEffect(() => {
     fetchData();
     const handleScheduledFetching = setInterval(() => {
@@ -24,37 +24,36 @@ const PositionLevelPortfolio: FC<PositionLevelPortfolioProps> = () => {
     return () => clearInterval(handleScheduledFetching);
   }, []);
 
-  const fetchData = async () => {
-    const result = await serverAPI.get('api/get_position_portfolio');
-    console.log(result.data);
-    setData(result.data);
-  }
-
-  
   return (
-  <div className={styles.PositionLevelPortfolio}>
-  PositionLevelPortfolio Component
-  <div>
+    <div className={styles.PositionLevelPortfolio}>
+      <b>Position Level Portfolios</b>
+      <div>
 
-  <table>
-    <tbody>
-      <tr>
-        <th>Desk</th>
-        <th>Trader</th>
-      </tr>
-      {data.map(item => {
-        return (
-          <tr key={item.pk} >
-            <td>{item.fields.desk_id}</td>
-            <td>{item.pk}</td>
-          </tr>
-        )
-      })}
-    </tbody>
-  </table>
+        <table>
+          <tbody>
+            <tr>
+              <th>Desk</th>
+              <th>Trader</th>
+              <th>Book</th>
+              <th>Position</th>
+              <th>NV</th>
+            </tr>
+            {data.map((item, index) => {
+              return (
+                <tr key={index} >
+                  <td>{item.desk}</td>
+                  <td>{item.trader}</td>
+                  <td>{item.book}</td>
+                  <td>{item.position}</td>
+                  <td>{Number(item.NV).toFixed(2)}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
 
-  </div>
-  </div>)
+      </div>
+    </div>)
 };
 
 export default PositionLevelPortfolio;

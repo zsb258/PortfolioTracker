@@ -13,7 +13,9 @@ const Header: FC<HeaderProps> = () => {
     console.log(result.data);
     setData(result.data);
   };
-  fetchData();
+  useEffect(() => {
+    fetchData();  // fetch data on component mount
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -24,28 +26,24 @@ const Header: FC<HeaderProps> = () => {
     return () => clearInterval(handleScheduledFetching);
   }, []);
 
-  // const [waitingBar, setWaitingBar] = useState<string>('.');
+  const [waitingBar, setWaitingBar] = useState<number>(5);
 
-  // useEffect(() => {
-  //   if (waitingBar === '....'){
-  //     setWaitingBar('.');
-  //   }
-
-  //   const intervalId = setInterval(() => {
-  //     setWaitingBar(waitingBar + '.');
-  //   }, 1000);
-
-  //   return () => clearInterval(intervalId);
-
-  // }, [waitingBar]);
+  useEffect(() => {
+    if (waitingBar === 0){
+      setWaitingBar(5);
+    }
+    const intervalId = setInterval(() => {
+      setWaitingBar(waitingBar - 1);
+    }, 1000);
+    return () => clearInterval(intervalId);
+  }, [waitingBar]);
 
   return (
     <div className={styles.Header}>
-      Header Component
-      <div>Data automatically refreshes every 5 seconds</div>
-      {/* <div>{waitingBar}</div> */}
-      <div>Latest event:</div>
-      <div>{data}</div>
+      Latest event ID: {data}
+      <div>
+        Fetching updates in {waitingBar}...
+      </div>
     </div>
   );
 };

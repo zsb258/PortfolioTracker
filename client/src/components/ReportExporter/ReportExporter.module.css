@@ -7,3 +7,12 @@
   height: 100%;
   background-color: #acacac;
 }
+
+.ReportExporter label {
+  margin-left: 10px;
+  margin-right: 5px;
+}
+
+.ReportExporter input {
+  margin-right: 10px;
+}
