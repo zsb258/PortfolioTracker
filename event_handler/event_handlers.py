@@ -29,6 +29,8 @@ class EventHandler(metaclass=Singleton):
         """Helper function to process FX event."""
         fx: FX = FX.objects.get(currency_id=event['ccy'])
         fx.rate = Decimal(event['rate'])
+        if fx.rate.compare(Decimal(0)) < 0:
+            raise ValueError(f'FX rate is negative: {fx.rate}')
         fx.save()
         CashAdjuster().log_market_event(event=event)
 
@@ -36,6 +38,8 @@ class EventHandler(metaclass=Singleton):
         """Helper function to process price event."""
         bond: Bond = Bond.objects.get(bond_id=event['BondID'])
         bond.price = Decimal(event['MarketPrice'])
+        if bond.price.compare(Decimal(0)) < 0:
+            raise ValueError(f'Bond price is negative: {bond.price}')
         if bond.initial_price is None:
             bond.initial_price = bond.price
         bond.save()
