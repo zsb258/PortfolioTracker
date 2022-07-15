@@ -1,11 +1,13 @@
 """Cash Adjuster Module"""
 
 from decimal import Decimal
+from locale import currency
 
 from django.db import IntegrityError
 
 from api.models import (
-    FX, Bond, Desk, Trader, Book, BondRecord, EventLog, EventExceptionLog
+    FX, Bond, Desk, Trader, Book, BondRecord,
+    EventLog, EventExceptionLog, FxEventLog, PriceEventLog,
 )
 from util.common_types import TradeEvent
 from util.trade_exceptions import TradeException
@@ -23,8 +25,14 @@ class CashAdjuster(metaclass=Singleton):
             desk.cash -= value
         elif event['BuySell'] == 'sell':
             desk.cash += value
-        desk.updated = int(event['EventID'])
         desk.save()
+
+    def _adjust_position(self, event: TradeEvent, bond_record: BondRecord) -> None:
+        if event['BuySell'] == 'buy':
+            bond_record.position += int(event['Quantity'])
+        elif event['BuySell'] == 'sell':
+            bond_record.position -= int(event['Quantity'])
+        bond_record.save()
 
     def _log_exception(
         self,
@@ -39,12 +47,12 @@ class CashAdjuster(metaclass=Singleton):
         try :
             EventExceptionLog.objects.create(
                 event_id=int(event['EventID']),
-                desk_id=desk,
-                trader_id=trader,
-                book_id=book,
+                desk=desk,
+                trader=trader,
+                book=book,
                 buy_sell=event['BuySell'],
                 quantity=int(event['Quantity']),
-                bond_id=bond,
+                bond=bond,
                 price=bond.price,  # None if bond does not have a price
                 exclusion_type=exclusion_type,
             )
@@ -52,12 +60,7 @@ class CashAdjuster(metaclass=Singleton):
             # TODO: Implement handling of duplicate entries
             pass
 
-    def _adjust_position(self, event: TradeEvent, bond_record: BondRecord) -> None:
-        if event['BuySell'] == 'buy':
-            bond_record.position += int(event['Quantity'])
-        elif event['BuySell'] == 'sell':
-            bond_record.position -= int(event['Quantity'])
-        bond_record.save()
+
 
     def _log_successful_trade_event(
         self,
@@ -74,12 +77,12 @@ class CashAdjuster(metaclass=Singleton):
         try:
             EventLog.objects.create(
                 event_id=int(event['EventID']),
-                desk_id=desk,
-                trader_id=trader,
-                book_id=book,
+                desk=desk,
+                trader=trader,
+                book=book,
                 buy_sell=event['BuySell'],
                 quantity=int(event['Quantity']),
-                bond_id=bond,
+                bond=bond,
                 position=bond_record.position,
                 price=bond.price,
                 fx_rate=fx.rate,
@@ -104,11 +107,11 @@ class CashAdjuster(metaclass=Singleton):
         desk: Desk = Desk.objects.get(desk_id=event['Desk'])
         trader: Trader = Trader.objects.get_or_create(
             trader_id=event['Trader'],
-            desk_id=desk
+            desk=desk
         )[0]
         book: Book = Book.objects.get_or_create(
             book_id=event['Book'],
-            trader_id=trader
+            trader=trader
         )[0]
 
         # Logging exception first to reduce the number of database queries
@@ -124,9 +127,9 @@ class CashAdjuster(metaclass=Singleton):
             return
 
         bond_record: BondRecord = BondRecord.objects.get_or_create(
-                trader_id=trader,
-                book_id=book,
-                bond_id=bond,
+            trader=trader,
+            book=book,
+            bond=bond,
         )[0]
         self._adjust_position(event=event, bond_record=bond_record)
 
@@ -154,3 +157,18 @@ class CashAdjuster(metaclass=Singleton):
     def log_event_with_exception(self, event: TradeEvent, exception: TradeException) -> None:
         """API function to log event with an exception."""
         self._process_log_event(event=event, exception=exception)
+    
+    def log_market_event(self, event: TradeEvent) -> None:
+        """API function to log market event."""
+        if event['EventType'] == 'FXEvent':
+            FxEventLog.objects.create(
+                event_id=int(event['EventID']),
+                currency=FX.objects.get(currency_id=event['ccy']),
+                rate=Decimal(event['rate']),
+            )
+        elif event['EventType'] == 'PriceEvent':
+            PriceEventLog.objects.create(
+                event_id=int(event['EventID']),
+                bond=Bond.objects.get(bond_id=event['BondID']),
+                price=Decimal(event['MarketPrice']),
+            )

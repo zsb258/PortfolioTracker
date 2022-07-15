@@ -4,9 +4,7 @@ from django.db.models.signals import post_migrate
 def callback(sender, **kwargs):
     # Need local imports to wait for django apps to finish loading
     from api.populate_db import populate
-    from event_generator.event_publisher import start_publishing
     populate()
-    start_publishing()
 
 class ApiConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'

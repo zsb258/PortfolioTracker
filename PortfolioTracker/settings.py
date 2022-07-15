@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'corsheaders',
     'api.apps.ApiConfig',
     'event_generator',
     'event_handler',
@@ -50,6 +51,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -79,6 +81,15 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'PortfolioTracker.wsgi.application'
 
+
+# CORS
+CORS_ORIGIN_ALLOW_ALL = True
+# CORS_ALLOW_CREDENTIALS = True
+# CORS_ALLOWED_ORIGINS = [
+#     'http://localhost:8000',
+#     'http://localhost:3000',  # React app
+#     'http://127.0.0.1:3000',  # React app
+# ]
 
 # Database
 # https://docs.djangoproject.com/en/4.0/ref/settings/#databases

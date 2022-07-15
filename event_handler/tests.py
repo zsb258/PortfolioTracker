@@ -74,12 +74,12 @@ class EventHandlerTestCase(TestCase):
 
         data = _read_csv(csv_filename='example/example_initial_fx.csv')
         for row in data:
-            FX.objects.get_or_create(currency=row[0], rate=row[1])
+            FX.objects.get_or_create(currency_id=row[0], rate=row[1])
 
         data = _read_csv(csv_filename='example/example_bond_details.csv')
         for row in data:
             Bond.objects.get_or_create(
-                bond_id=row[0], currency=FX.objects.get(currency=row[1])
+                bond_id=row[0], currency=FX.objects.get(currency_id=row[1])
             )
 
         data = _read_csv(csv_filename='example/example_initial_cash.csv')
@@ -120,7 +120,7 @@ class EventHandlerTestCase(TestCase):
         self.assertDictEqual(event, sample_market_data[2])
         self.event_handler.handle_event(event)
         self.assertEqual(
-            FX.objects.get(currency=event['ccy']).rate,
+            FX.objects.get(currency_id=event['ccy']).rate,
             event['rate'],
         )
 

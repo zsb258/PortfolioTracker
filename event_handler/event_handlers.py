@@ -4,7 +4,9 @@ from decimal import Decimal
 import heapq
 from typing import Callable, Dict, List, Tuple
 
-from api.models import FX, Bond, Desk, BondRecord
+from django.db.models import QuerySet
+
+from api.models import FX, Bond, Desk, BondRecord, FxEventLog, PriceEventLog
 from util.common_types import Event, TradeEvent, PriceEvent, FXEvent
 from util.trade_exceptions import (
     NoMarketPriceException,
@@ -13,11 +15,11 @@ from util.trade_exceptions import (
 )
 from util.singleton import Singleton
 from .cash_adjuster import CashAdjuster
+from util import common_fns
 
 
 class EventHandler(metaclass=Singleton):
     """Class to handle events."""
-    _latest_event_id: int = 0
     _queue: List[Tuple[int, Event]] = []
 
     def __init__(self):
@@ -25,10 +27,11 @@ class EventHandler(metaclass=Singleton):
 
     def _process_fx_event(self, event: FXEvent) -> None:
         """Helper function to process FX event."""
-        fx: FX = FX.objects.get(currency=event['ccy'])
+        fx: FX = FX.objects.get(currency_id=event['ccy'])
         fx.rate = Decimal(event['rate'])
         fx.updated = int(event['EventID'])
         fx.save()
+        CashAdjuster().log_market_event(event=event)
 
     def _process_price_event(self, event: PriceEvent) -> None:
         """Helper function to process price event."""
@@ -36,6 +39,7 @@ class EventHandler(metaclass=Singleton):
         bond.price = Decimal(event['MarketPrice'])
         bond.updated = int(event['EventID'])
         bond.save()
+        CashAdjuster().log_market_event(event=event)
 
     def _process_trade_event(self, event: TradeEvent) -> None:
         """Helper function to process trade event."""
@@ -67,18 +71,14 @@ class EventHandler(metaclass=Singleton):
 
     def _process_sell(self, event: TradeEvent) -> None:
         """Helper function to process sell event."""
-        bond_record_exists: bool = BondRecord.objects.filter(
-            trader_id=event['Trader'],
-            book_id=event['Book'],
-            bond_id=event['BondID'],
-        ).exists()
-        if not bond_record_exists:
+        bond_records: QuerySet = BondRecord.objects.filter(
+            trader=event['Trader'],
+            book=event['Book'],
+            bond=event['BondID'],
+        )
+        if not bond_records.exists():
             raise QuantityOverlimitException(event['EventID'])
-        bond_record: BondRecord = BondRecord.objects.filter(
-            trader_id=event['Trader'],
-            book_id=event['Book'],
-            bond_id=event['BondID'],
-        )[0]
+        bond_record: BondRecord = bond_records[0]
         if bond_record.position < Decimal(event['Quantity']):
             raise QuantityOverlimitException(event['EventID'])
 
@@ -99,17 +99,11 @@ class EventHandler(metaclass=Singleton):
         }
         if event['EventType'] in event_to_function_map:
             event_to_function_map[event['EventType']](event)
-            self._update_id(event)
         else:
             raise ValueError(f'Unknown event: {event}')
 
-    def _update_id(self, event: Event) -> None:
-        """Helper function to update latest event id."""
-        if int(event['EventID']) > self._latest_event_id:
-            self._latest_event_id = int(event['EventID'])
-
     def _validate_event_sequence(self, event: Event) -> None:
-        if int(event['EventID']) ==  self._latest_event_id + 1:
+        if int(event['EventID']) ==  common_fns.get_largest_event_id() + 1:
             self._process_event(event)
         else:
             heapq.heappush(self._queue, (int(event['EventID']), event))
@@ -117,19 +111,13 @@ class EventHandler(metaclass=Singleton):
     def _validate_queue(self) -> None:
         """Helper function to process first event in queue."""
         if len(self._queue) > 0:
-            while len(self._queue) > 0 and self._queue[0][0] <= self._latest_event_id:
+            while len(self._queue) > 0 and self._queue[0][0] <= common_fns.get_largest_event_id():
                 # Pop and discard old events that could be sent in from duplicate requests
                 heapq.heappop(self._queue)
         if len(self._queue) > 0:
-            while len(self._queue) > 0 and self._queue[0][0] == self._latest_event_id + 1:
+            while len(self._queue) > 0 and self._queue[0][0] == common_fns.get_largest_event_id() + 1:
                 event_id, event = heapq.heappop(self._queue)
                 self._process_event(event)
-
-    def get_latest_event_id(self) -> int:
-        """API function to get id of the latest event that has been processed.
-        Mainly for use in report generator.
-        """
-        return self._latest_event_id
 
     def handle_event(self, event: Event) -> None:
         """API function to handle event."""

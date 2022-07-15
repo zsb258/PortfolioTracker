@@ -210,4 +210,5 @@ dev.sh
 .temp/
 db-test.sqlite3
 db-test.sqlite3-journal
-
+_publish-all.py
+out/*/
