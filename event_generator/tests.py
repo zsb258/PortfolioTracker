@@ -7,7 +7,7 @@ from api.models import (
     FX, Bond, Desk, Trader, Book, BondRecord, EventLog, EventExceptionLog
 )
 from event_generator.event_generator import EventGenerator
-from event_generator.event_publisher import _scheduler
+from event_generator.market_data_publisher import _scheduler
 from util.common_types import Event, MarketEvent, TradeEvent, PriceEvent, FXEvent
 
 class EventTypesTestCase(TestCase):
@@ -127,6 +127,7 @@ class EventGeneratorTestCase(TestCase):
             curr = self.generator_a._trade_event_producer.send_next()
         self.assertDictEqual(curr, sample_trade_event_last)
 
+# FIXME: This test is not working.
 class SchedulerTestCase(LiveServerTestCase):
     """Requires changing TEST_URL to point to localhost:8001"""
     def setUp(self) -> None:
@@ -142,12 +143,12 @@ class SchedulerTestCase(LiveServerTestCase):
         # Populate test DB
         data = _read_csv(csv_filename='example/example_initial_fx.csv')
         for row in data:
-            FX.objects.get_or_create(currency=row[0], rate=row[1])
+            FX.objects.get_or_create(currency_id=row[0], rate=row[1])
 
         data = _read_csv(csv_filename='example/example_bond_details.csv')
         for row in data:
             Bond.objects.get_or_create(
-                bond_id=row[0], currency=FX.objects.get(currency=row[1])
+                bond_id=row[0], currency=FX.objects.get(currency_id=row[1])
             )
 
         data = _read_csv(csv_filename='example/example_initial_cash.csv')
