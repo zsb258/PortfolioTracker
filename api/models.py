@@ -74,6 +74,9 @@ class BondRecord(models.Model):
     bond: str = models.ForeignKey(Bond, on_delete=models.CASCADE)
     position: int = models.PositiveIntegerField(default=0)
 
+    class Meta:
+        ordering = ['trader', 'book', 'bond']
+
     def __str__(self):
         return f'by:[{self.trader}] bond:[{self.bond}] at:[{self.position}]'
 

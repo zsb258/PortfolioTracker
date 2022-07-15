@@ -42,7 +42,8 @@ class PortfolioGenerator(metaclass=Singleton):
             AND api_bondrecord.trader_id = api_trader.trader_id
             AND api_trader.desk_id = api_desk.desk_id
             AND api_bond.currency_id = api_fx.currency_id
-            GROUP BY api_desk.desk_id, api_trader.trader_id, api_book.book_id;
+            GROUP BY api_desk.desk_id, api_trader.trader_id, api_book.book_id
+            ORDER BY api_desk.desk_id, api_trader.trader_id, api_book.book_id;
             """
         )
         res: List = []
@@ -58,7 +59,7 @@ class PortfolioGenerator(metaclass=Singleton):
 
     def generate_bond_level_data(self) -> List[Dict]:
         """Generate newest position level portfolio data."""
-        bond_records: QuerySet = BondRecord.objects.all().order_by('trader', 'book')
+        bond_records: QuerySet = BondRecord.objects.all().order_by('trader', 'book', 'bond')
         res: List = []
         for record in bond_records:
             res.append({
@@ -86,7 +87,8 @@ class PortfolioGenerator(metaclass=Singleton):
             AND api_bondrecord.trader_id = api_trader.trader_id
             AND api_trader.desk_id = api_desk.desk_id
             AND api_bond.currency_id = api_fx.currency_id
-            GROUP BY api_desk.desk_id, api_fx.currency_id;
+            GROUP BY api_desk.desk_id, api_fx.currency_id
+            ORDER BY api_desk.desk_id, api_fx.currency_id;
             """
         )
 
