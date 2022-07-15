@@ -31,48 +31,16 @@ Recommended environment:
 These scripts emulate sending market data or trade events to the server, by periodically making POST requests to server, with event details as payload.
 1. Run on a new terminal
     ```console
+    $ source ./venv/bin/activate
     $ python3 publish-market-data.py
     ```
 2. Run on yet another terminal
     ```console
+    $ source ./venv/bin/activate
     $ python3 publish-trade-events.py
     ```
 
 *The above scripts are written for `bash` on Windows Subsystem for Linux 2 (WSL2), hence recommend using UNIX systems for compatibility.*
-
-<br>
-
-## Staring on Windows without WSL2
-1. Run on PowerShell
-    ```powershell
-    > python3 -m venv venv
-
-    > . .\venv\scripts\activate
-
-    > pip install -r requirements.txt
-
-    > rm db.sqlite3
-
-    > python3 manage.py migrate
-
-    > python3 manage.py runserver
-    ```
-
-2. Run on new PowerShell terminal
-    ```powershell
-    > cd client
-
-    > npm start
-    ```
-
-3. Run on new terminals
-     ```powershell
-    >  python3 publish-market-data.py
-    ```
-    and
-     ```powershell
-    >  python3 publish-trade-events.py
-    ```
 
 <br>
 
