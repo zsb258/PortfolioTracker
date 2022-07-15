@@ -1,15 +1,13 @@
 """Module to generate reports."""
 
-from dataclasses import dataclass
+
 from pathlib import Path
 import csv
 from decimal import Decimal
-from typing import Callable, List
+from typing import Callable, Dict, List, Tuple, Union
 from itertools import groupby
-from typing_extensions import dataclass_transform
 
 from django.http import HttpResponse
-from typing import Dict, List, Tuple, Union
 
 from api.models import (
     FX, Bond, Desk, BondRecord, EventLog, EventExceptionLog, FxEventLog, PriceEventLog,
@@ -34,14 +32,9 @@ class ReportGenerator(metaclass=Singleton):
 
     # Maps desk_id to cash
     _desks: Dict[str, Decimal] = {}
-    
+
     # Maps bond_id to a dict with keys 'currency', 'price'
     _bonds: Dict[str, Dict[str, Union[str, Decimal]]] = {}
-
-    # A quick fix that resets state after some advances/backtracks
-    # States may become inconsistent if running for too long
-    # Suspect problems with EventLogs, Django ORM, or memory issues
-    _reset_counter: int = 5
 
     def __init__(self):
         pass
@@ -83,17 +76,16 @@ class ReportGenerator(metaclass=Singleton):
             value: Decimal = record.position
 
             records[key] = value
-        
+
         self._state_data = records
 
-    def _reset_states_and_set_up(self) -> None:
+    def _reset_states(self) -> None:
         """Helper function to reset current data."""
         self._state_id = 0
         self._state_data = {}
         self._fx = {}
         self._bonds = {}
         self._desks = {}
-        self._set_up()
 
     def _set_up(self) -> None:
         """Helper function to set up data for report generation."""
@@ -104,17 +96,17 @@ class ReportGenerator(metaclass=Singleton):
 
     def _move_to_target_state(self, target_id: int) -> None:
         """Helper function to move to target state."""
-        if self._reset_counter > 0:
-            self._set_up()
-            self._reset_counter -= 1
-        else:
-            self._reset_states_and_set_up()
-            self._reset_counter = 5
+        if self._state_id == target_id:
+            return
 
+        self._set_up()
         if self._state_id < target_id:
             self._advance_events(target_id)
         elif self._state_id > target_id:
             self._backtrack_events(target_id)
+
+        self._move_fx_bonds_states(target_id)
+        self._state_id = target_id
 
     def _advance_events(self, target_id: int) -> None:
         """Query DB for logs of events strictly after state_id
@@ -148,41 +140,16 @@ class ReportGenerator(metaclass=Singleton):
                     self._desks[log.desk.desk_id] += log.value
                     self._state_data[key] -= log.quantity
 
-                self._fx[log.bond.currency.currency_id] = log.fx_rate
-                self._bonds[log.bond.bond_id]['price'] = log.price
-
-
-        # Retrieve fx changes not reflected in EventLogs
-        fx_logs: List[FxEventLog] = (
-            FxEventLog.objects
-            .filter(event_id__range=(self._state_id + 1, target_id))
-            .order_by('event_id')
-        )
-        if fx_logs.exists():
-            # Iterate to update any unreflected fx changes
-            for fx_log in fx_logs:
-                self._fx[fx_log.currency.currency_id] = fx_log.rate
-        
-        # Retrieve price changes not reflected in EventLogs
-        price_logs: List[PriceEventLog] = (
-            PriceEventLog.objects
-            .filter(event_id__range=(self._state_id + 1, target_id))
-            .order_by('event_id')
-        )
-        if price_logs.exists():
-            # Iterate to update any unreflected price changes
-            for price_log in price_logs:
-                self._bonds[price_log.bond.bond_id]['price'] = price_log.price
-
-        # Finished backtracking
-        self._state_id = target_id
-
     def _backtrack_events(self, target_id: int) -> None:
         """Query DB for logs of events strictly after target_id, and reverse them."""
 
         # Logs are ordered from newest to oldest
-        logs: List[EventLog] = EventLog.objects.filter(event_id__gt=target_id).order_by('-event_id')
-        
+        logs: List[EventLog] = (
+            EventLog.objects
+            .filter(event_id__range=(target_id + 1, self._state_id))
+            .order_by('-event_id')
+        )
+
         if logs.exists():
         # Logs are ordered from newest to oldest
             for log in logs:
@@ -201,36 +168,44 @@ class ReportGenerator(metaclass=Singleton):
                     self._desks[log.desk.desk_id] -= log.value
                     self._state_data[key] += log.quantity
 
-                self._fx[log.bond.currency.currency_id] = log.fx_rate
-                self._bonds[log.bond.bond_id]['price'] = log.price
-                
-        # Retrieve fx changes not reflected in EventLogs
-        fx_logs: List[FxEventLog] = (
-            FxEventLog.objects
-            .filter(event_id__gt=target_id)
-            .order_by('-event_id')
-        )
-        if fx_logs.exists():
-            # Iterate to update any unreflected fx changes
-            for fx_log in fx_logs:
-                self._fx[fx_log.currency.currency_id] = fx_log.rate
-        
-        # Retrieve price changes not reflected in EventLogs
-        price_logs: List[PriceEventLog] = (
-            PriceEventLog.objects
-            .filter(event_id__gt=target_id)
-            .order_by('-event_id')
-        )
-        if price_logs.exists():
-            # Iterate to update any unreflected price changes
-            for price_log in price_logs:
-                self._bonds[price_log.bond.bond_id]['price'] = price_log.price
+    def _move_fx_bonds_states(self, target_id: int) -> None:
+        """Helper function to update fx and bonds state."""
+        # Iterate to update any unreflected fx changes
+        for currency_id, _ in self._fx.items():
+            # Retrieve latest fx change for `currency_id` that happened on or before `target_id`
+            fx_log = (
+                FxEventLog.objects
+                .filter(currency__currency_id=currency_id)
+                .filter(event_id__lte=target_id)
+                .order_by('-event_id')
+            )
+            if fx_log.exists():
+                self._fx[currency_id] = fx_log.first().rate
+            else:
+                # No fx change for `currency_id` happened on or before `target_id`
+                self._fx[currency_id] = FX.objects.get(currency_id=currency_id).initial
 
-        # Finished backtracking
-        self._state_id = target_id
+        # Iterate to update any unreflected price changes
+        for bond_id, fields in self._bonds.items():
+            # Retrieve latest price change for `bond_id` that happened on or before `target_id`
+            price_log = (
+                PriceEventLog.objects
+                .filter(bond__bond_id=bond_id)
+                .filter(event_id__lte=target_id)
+                .order_by('-event_id')
+            )
+            if price_log.exists():
+                fields['price'] = price_log.first().price
+                self._bonds[bond_id] = fields
+            else:
+                # No price change for `bond_id` happened on or before `target_id`
+                self._bonds[bond_id]['price'] = Bond.objects.get(bond_id=bond_id).initial_price
+
 
     def _write_cash_level_data(self, destination, target_id):
-        """Helper to write cash level data to file or stream. Then return the same object."""
+        """Helper to write cash level data to file or stream. Then return the same object.
+        @ignored_param:` target_id`
+        """
 
         writer = csv.writer(destination)
         writer.writerow([
@@ -245,11 +220,16 @@ class ReportGenerator(metaclass=Singleton):
         return destination
 
     def _write_position_level_data(self, destination, target_id):
-        """Helper to write position level data to file or stream. Then return the same object."""
+        """Helper to write position level data to file or stream. Then return the same object.
+        @ignored_param:` target_id`
+        """
+
+        # Sort before groupby
+        sorted_items = sorted(self._state_data.items(), key=lambda x: x[0])
 
         temp = []
         # Group by [desk, trader, book] and storing the groups in temp for further manipulation
-        for key, group in groupby(self._state_data.items(), key=lambda x: x[0][0:3]):
+        for key, group in groupby(sorted_items, key=lambda x: x[0][0:3]):
             temp.append((key, list(group)))
 
         data = []
@@ -281,13 +261,15 @@ class ReportGenerator(metaclass=Singleton):
         return destination
 
     def _write_bond_level_data(self, destination, target_id):
-        """Helper to write bond level data to file or stream. Then return the same object."""
-        
+        """Helper to write bond level data to file or stream. Then return the same object.
+        @ignored_param:` target_id`
+        """
+
         # Sort before groupby
         sorted_items = sorted(self._state_data.items(), key=lambda x: x[0])
 
         temp = []
-        # Group by [desk, trader, book, bond] and storing the groups in temp for further manipulation
+        # Group by [desk, trader, book, bond] and store the groups in temp for further manipulation
         for key, group in groupby(sorted_items, key=lambda x: x[0]):
             temp.append((key, list(group)))
 
@@ -322,13 +304,16 @@ class ReportGenerator(metaclass=Singleton):
         return destination
 
     def _write_currency_level_data(self, destination, target_id):
-        """Helper to write currency level data to file or stream. Then return the same object."""
+        """Helper to write currency level data to file or stream. Then return the same object.
+        @ignored_param:` target_id`
+        """
+
         def get_key(x):
             # x is a tuple-like of ((desk_id, trader_id, book_id, bond_id), position)
             desk_id = x[0][0]
             ccy_id = self._bonds[x[0][3]]['currency']
             return (desk_id, ccy_id)
-        
+
         # Sort before groupby
         sorted_items = sorted(self._state_data.items(), key=get_key)
 
@@ -367,7 +352,9 @@ class ReportGenerator(metaclass=Singleton):
         """Helper to write exclusion data to file or stream. Then return the same object.
         Data required for exclusions output are read from DB and not from state_data.
         """
-        exclusions: List[EventExceptionLog] = EventExceptionLog.objects.filter(event_id__lte=target_id)
+        exclusions: List[EventExceptionLog] = (
+            EventExceptionLog.objects.filter(event_id__lte=target_id)
+        )
         writer = csv.writer(destination)
         writer.writerow([
             'EventID',
@@ -395,9 +382,12 @@ class ReportGenerator(metaclass=Singleton):
             ])
         return destination
 
-    def generate_report(self, target_id: int, report_type: str, to_http_response=False) -> Union[None, HttpResponse]:
+    def generate_report(
+        self, target_id: int, report_type: str, to_http_response=False
+    ) -> Union[None, HttpResponse]:
         """Generate reports.
-        @param to_http_response: return HttpResponse with csv data if True, otherwise write to file and return None.
+        @param to_http_response: return HttpResponse with csv data if True,
+        otherwise write to file and return None.
         """
         type_to_fn_mapping: Dict[str, Callable] = {
             'cash_level_portfolio': self._write_cash_level_data,
@@ -408,7 +398,7 @@ class ReportGenerator(metaclass=Singleton):
         }
         if report_type not in type_to_fn_mapping:
             raise ValueError(f'Unknown report type: {report_type}')
-        
+
         # Ensure data is at the state of event `target_id`
         self._move_to_target_state(target_id)
 

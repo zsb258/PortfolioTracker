@@ -25,7 +25,7 @@ def _read_csv(csv_filename: str) -> Union[List[List[str]], str]:
 def _add_fx(filename: str = 'initial_fx.csv'):
     data: List[List[str]] = _read_csv(filename)
     for row in data:
-        FX.objects.get_or_create(currency_id=row[0], rate=row[1])
+        FX.objects.get_or_create(currency_id=row[0], rate=row[1], initial=row[1])
 
 def _add_bonds(filename: str = 'bond_details.csv'):
     data: List[List[str]] = _read_csv(filename)

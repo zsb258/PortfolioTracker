@@ -9,6 +9,7 @@ class FX(models.Model):
     """Schema for table `FX`. Stores most updated exchange rates."""
     currency_id: str = models.CharField(max_length=3, primary_key=True)
     rate: Decimal = models.DecimalField(max_digits=19, decimal_places=5)
+    initial: Decimal = models.DecimalField(max_digits=19, decimal_places=5)
 
     class Meta:
         ordering = ['currency_id']
@@ -21,6 +22,9 @@ class Bond(models.Model):
     bond_id: str = models.CharField(max_length=6, primary_key=True)
     currency: str = models.ForeignKey(FX, on_delete=models.CASCADE)
     price: Decimal = models.DecimalField(
+        max_digits=19, decimal_places=5, blank=True, null=True
+    )
+    initial_price: Decimal = models.DecimalField(
         max_digits=19, decimal_places=5, blank=True, null=True
     )
 
